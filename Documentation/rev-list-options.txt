@@ -1103,9 +1103,15 @@ format placeholders. When using `-local`, the correct syntax is
 `--date=default` is the default format, and is similar to
 `--date=rfc2822`, with a few exceptions:
 --
-	- there is no comma after the day-of-week
+	- There is no comma after the day-of-week
 
-	- the time zone is omitted when the local time zone is used
+	- The time zone is omitted when the local time zone is used
+
+	- Day-of-month and month are switched around
+
+	- Time-of-day and the year are switched around
+
+As a result, the format looks as follows: `Thu Jan 1 00:00:00 1970 +0000` with `+0000` being omitted when the local time zone is used.
 
 ifdef::git-rev-list[]
 --header::
