@@ -488,7 +488,8 @@ static void print_current_branch_name(void)
 
 /*
  * Dies if the specified branch is being rebased or bisected.  Otherwise returns
- * 0 or, if the branch is HEAD in any worktree, returns 1.
+ * 0 or, if the branch is HEAD in any worktree, returns 1. If the branch is HEAD
+ * and also orphan, returns 2.
  */
 static int die_if_branch_is_being_rebased_or_bisected(const char *target)
 {
@@ -499,7 +500,7 @@ static int die_if_branch_is_being_rebased_or_bisected(const char *target)
 		struct worktree *wt = worktrees[i];
 
 		if (wt->head_ref && !strcmp(target, wt->head_ref))
-			ret = 1;
+			ret = is_null_oid(&wt->head_oid) ? 2 : 1;
 
 		if (!wt->is_detached)
 			continue;
@@ -523,7 +524,7 @@ static void copy_or_rename_branch(const char *oldname, const char *newname, int 
 	struct strbuf oldsection = STRBUF_INIT, newsection = STRBUF_INIT;
 	const char *interpreted_oldname = NULL;
 	const char *interpreted_newname = NULL;
-	int recovery = 0, oldref_is_head;
+	int recovery = 0, oldref_is_head, oldref_is_orphan;
 
 	if (strbuf_check_branch_ref(&oldref, oldname)) {
 		/*
@@ -537,9 +538,11 @@ static void copy_or_rename_branch(const char *oldname, const char *newname, int 
 	}
 
 	oldref_is_head = die_if_branch_is_being_rebased_or_bisected(oldref.buf);
+	oldref_is_orphan = (oldref_is_head > 1);
 
-	if ((copy || !oldref_is_head) && !ref_exists(oldref.buf))
-		die(oldref_is_head
+	if ((copy || !oldref_is_head) &&
+	    (oldref_is_orphan || !ref_exists(oldref.buf)))
+		die(oldref_is_orphan
 		    ? _("No commit on branch '%s' yet.")
 		    : _("No branch named '%s'."), oldname);
 
@@ -564,8 +567,7 @@ static void copy_or_rename_branch(const char *oldname, const char *newname, int 
 		strbuf_addf(&logmsg, "Branch: renamed %s to %s",
 			    oldref.buf, newref.buf);
 
-	if (!copy &&
-	    (!head || strcmp(oldname, head) || !is_null_oid(&head_oid)) &&
+	if (!copy && !oldref_is_orphan &&
 	    rename_ref(oldref.buf, newref.buf, logmsg.buf))
 		die(_("Branch rename failed"));
 	if (copy && copy_existing_ref(oldref.buf, newref.buf, logmsg.buf))
