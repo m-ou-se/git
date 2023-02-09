@@ -88,6 +88,31 @@ static int match_stat_with_submodule(struct diff_options *diffopt,
 	return changed;
 }
 
+static int diff_change_helper(struct diff_options *options,
+	      unsigned newmode, unsigned dirty_submodule,
+	      int changed, struct index_state *istate,
+	      struct cache_entry *ce)
+{
+	unsigned int oldmode;
+	const struct object_id *old_oid, *new_oid;
+
+	if (!changed && !dirty_submodule) {
+		ce_mark_uptodate(ce);
+		mark_fsmonitor_valid(istate, ce);
+		if (!options->flags.find_copies_harder)
+			return 1;
+	}
+	oldmode = ce->ce_mode;
+	old_oid = &ce->oid;
+	new_oid = changed ? null_oid() : &ce->oid;
+	diff_change(options, oldmode, newmode,
+			old_oid, new_oid,
+			!is_null_oid(old_oid),
+			!is_null_oid(new_oid),
+			ce->name, 0, dirty_submodule);
+	return 0;
+}
+
 int run_diff_files(struct rev_info *revs, unsigned int option)
 {
 	int entries, i;
@@ -105,11 +130,10 @@ int run_diff_files(struct rev_info *revs, unsigned int option)
 		diff_unmerged_stage = 2;
 	entries = istate->cache_nr;
 	for (i = 0; i < entries; i++) {
-		unsigned int oldmode, newmode;
+		unsigned int newmode;
 		struct cache_entry *ce = istate->cache[i];
 		int changed;
 		unsigned dirty_submodule = 0;
-		const struct object_id *old_oid, *new_oid;
 
 		if (diff_can_quit_early(&revs->diffopt))
 			break;
@@ -245,21 +269,9 @@ int run_diff_files(struct rev_info *revs, unsigned int option)
 			newmode = ce_mode_from_stat(ce, st.st_mode);
 		}
 
-		if (!changed && !dirty_submodule) {
-			ce_mark_uptodate(ce);
-			mark_fsmonitor_valid(istate, ce);
-			if (!revs->diffopt.flags.find_copies_harder)
-				continue;
-		}
-		oldmode = ce->ce_mode;
-		old_oid = &ce->oid;
-		new_oid = changed ? null_oid() : &ce->oid;
-		diff_change(&revs->diffopt, oldmode, newmode,
-			    old_oid, new_oid,
-			    !is_null_oid(old_oid),
-			    !is_null_oid(new_oid),
-			    ce->name, 0, dirty_submodule);
-
+		if (diff_change_helper(&revs->diffopt, newmode, dirty_submodule,
+				       changed, istate, ce))
+			continue;
 	}
 	diffcore_std(&revs->diffopt);
 	diff_flush(&revs->diffopt);
