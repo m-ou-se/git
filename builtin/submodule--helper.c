@@ -2225,7 +2225,10 @@ static int fetch_in_submodule(const char *module_path, int depth, int quiet,
 		strvec_pushf(&cp.args, "--depth=%d", depth);
 	if (oid) {
 		char *hex = oid_to_hex(oid);
-		char *remote = get_default_remote();
+		char *remote;
+		int code = get_default_remote_submodule(module_path, &remote);
+		if (code)
+			return code;
 
 		strvec_pushl(&cp.args, remote, hex, NULL);
 		free(remote);
